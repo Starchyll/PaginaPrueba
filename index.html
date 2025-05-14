@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encriptador de Mensajes con RSA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+        .container-centered {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .card {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 450px;
+        }
+        .btn {
+            transition: background-color 0.3s ease;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+        }
+        .btn-primary {
+            background-color: #3b82f6;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        .btn-secondary {
+            background-color: #ef4444;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: #dc2626;
+        }
+        .input-field {
+            border-radius: 0.5rem;
+            border: 1px solid #d1d5db;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+        textarea.input-field {
+            min-height: 100px;
+        }
+        .message-box {
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        .message-box-info {
+            background-color: #e0f2fe;
+            color: #0c4a6e;
+            border: 1px solid #7dd3fc;
+        }
+        .message-box-success {
+            background-color: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+        .message-box-error {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        .disclaimer-text {
+            font-size: 0.8rem;
+            color: #4b5563; /* Slightly darker gray */
+            text-align: center;
+            margin-top: 1.5rem;
+            padding: 0.75rem;
+            background-color: #f3f4f6; /* Lighter gray background */
+            border-radius: 0.375rem;
+            border: 1px solid #e5e7eb;
+        }
+         .disclaimer-text strong {
+            color: #1f2937; /* Darker text for emphasis */
+         }
+        .auth-toggle-link {
+            display: block;
+            text-align: center;
+            margin-top: 1rem;
+            color: #3b82f6;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .auth-toggle-link:hover {
+            text-decoration: underline;
+        }
+        .hidden {
+            display: none;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-centered">
+        <div id="loginSection" class="card">
+            <h1 class="text-2xl font-bold text-center mb-6 text-gray-700">Iniciar Sesión</h1>
+            <form id="loginForm">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-600 mb-1">Usuario</label>
+                    <input type="text" id="username" class="input-field" required placeholder="Tu usuario">
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-sm font-medium text-gray-600 mb-1">Contraseña</label>
+                    <input type="password" id="password" class="input-field" required placeholder="Tu contraseña">
+                </div>
+                <button type="submit" class="btn btn-primary w-full">Ingresar</button>
+            </form>
+            <div id="loginMessage" class="message-box mt-4 hidden"></div>
+            <span class="auth-toggle-link" id="showRegister">¿No tienes cuenta? Regístrate aquí</span>
+        </div>
+
+        <div id="registerSection" class="card hidden">
+            <h1 class="text-2xl font-bold text-center mb-6 text-gray-700">Crear Cuenta</h1>
+            <form id="registerForm">
+                <div class="mb-4">
+                    <label for="newUsername" class="block text-sm font-medium text-gray-600 mb-1">Nuevo Usuario</label>
+                    <input type="text" id="newUsername" class="input-field" required placeholder="Elige un nombre de usuario">
+                </div>
+                <div class="mb-4">
+                    <label for="newPassword" class="block text-sm font-medium text-gray-600 mb-1">Nueva Contraseña</label>
+                    <input type="password" id="newPassword" class="input-field" required placeholder="Crea una contraseña">
+                </div>
+                <div class="mb-6">
+                    <label for="confirmPassword" class="block text-sm font-medium text-gray-600 mb-1">Confirmar Contraseña</label>
+                    <input type="password" id="confirmPassword" class="input-field" required placeholder="Confirma tu contraseña">
+                </div>
+                <button type="submit" class="btn btn-primary w-full flex items-center justify-center">
+                    <span class="loader hidden mr-2" id="registerLoader"></span>Registrar
+                </button>
+            </form>
+            <div id="registerMessage" class="message-box mt-4 hidden"></div>
+            <span class="auth-toggle-link" id="showLogin">¿Ya tienes cuenta? Inicia sesión</span>
+        </div>
+
+        <div id="appSection" class="card hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-700">Encriptador RSA</h1>
+                <button id="logoutButton" class="btn btn-secondary text-sm">Cerrar Sesión</button>
+            </div>
+            
+            <div class="mb-4">
+                <label for="message" class="block text-sm font-medium text-gray-600 mb-1">Mensaje</label>
+                <textarea id="message" class="input-field" placeholder="Escribe tu mensaje aquí..."></textarea>
+            </div>
+
+            <div class="flex space-x-4 mb-4">
+                <button id="encryptButton" class="btn btn-primary flex-1 flex items-center justify-center">
+                    <span class="loader hidden mr-2"></span>Encriptar
+                </button>
+                <button id="decryptButton" class="btn btn-primary flex-1 bg-green-500 hover:bg-green-600 flex items-center justify-center">
+                    <span class="loader hidden mr-2"></span>Desencriptar
+                </button>
+            </div>
+
+            <div id="appMessage" class="message-box hidden"></div>
+
+            <div class="mb-4">
+                <label for="result" class="block text-sm font-medium text-gray-600 mb-1">Resultado (Base64)</label>
+                <textarea id="result" class="input-field bg-gray-100" readonly placeholder="El resultado encriptado/desencriptado aparecerá aquí..."></textarea>
+            </div>
+
+            <div class="disclaimer-text">
+                <p>Esta herramienta utiliza encriptación <strong>RSA-OAEP (SHA-256)</strong> con claves de 2048 bits.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
