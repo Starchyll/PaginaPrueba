@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Encriptador de Mensajes</title>
+    <title>Encriptador de Mensajes con RSA</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -68,7 +68,7 @@
             color: #0c4a6e;
             border: 1px solid #7dd3fc;
         }
-        .message-box-success { /* Nuevo estilo para mensajes de éxito */
+        .message-box-success {
             background-color: #d1fae5;
             color: #065f46;
             border: 1px solid #6ee7b7;
@@ -80,14 +80,17 @@
         }
         .disclaimer-text {
             font-size: 0.8rem;
-            color: #6b7280;
+            color: #4b5563; /* Slightly darker gray */
             text-align: center;
             margin-top: 1.5rem;
-            padding: 0.5rem;
-            background-color: #f9fafb;
+            padding: 0.75rem;
+            background-color: #f3f4f6; /* Lighter gray background */
             border-radius: 0.375rem;
             border: 1px solid #e5e7eb;
         }
+         .disclaimer-text strong {
+            color: #1f2937; /* Darker text for emphasis */
+         }
         .auth-toggle-link {
             display: block;
             text-align: center;
@@ -151,7 +154,9 @@
                     <label for="confirmPassword" class="block text-sm font-medium text-gray-600 mb-1">Confirmar Contraseña</label>
                     <input type="password" id="confirmPassword" class="input-field" required placeholder="Confirma tu contraseña">
                 </div>
-                <button type="submit" class="btn btn-primary w-full">Registrar</button>
+                <button type="submit" class="btn btn-primary w-full flex items-center justify-center">
+                    <span class="loader hidden mr-2" id="registerLoader"></span>Registrar
+                </button>
             </form>
             <div id="registerMessage" class="message-box mt-4 hidden"></div>
             <span class="auth-toggle-link" id="showLogin">¿Ya tienes cuenta? Inicia sesión</span>
@@ -159,7 +164,7 @@
 
         <div id="appSection" class="card hidden">
             <div class="flex justify-between items-center mb-6">
-                <h1 class="text-2xl font-bold text-gray-700">Encriptador</h1>
+                <h1 class="text-2xl font-bold text-gray-700">Encriptador RSA</h1>
                 <button id="logoutButton" class="btn btn-secondary text-sm">Cerrar Sesión</button>
             </div>
             
@@ -180,285 +185,16 @@
             <div id="appMessage" class="message-box hidden"></div>
 
             <div class="mb-4">
-                <label for="result" class="block text-sm font-medium text-gray-600 mb-1">Resultado</label>
-                <textarea id="result" class="input-field bg-gray-100" readonly placeholder="El resultado aparecerá aquí..."></textarea>
+                <label for="result" class="block text-sm font-medium text-gray-600 mb-1">Resultado (Base64)</label>
+                <textarea id="result" class="input-field bg-gray-100" readonly placeholder="El resultado encriptado/desencriptado aparecerá aquí..."></textarea>
             </div>
 
             <div class="disclaimer-text">
-                <p>Esta herramienta utiliza codificación <strong>Base64</strong> para transformar el texto.</p>
+                <p>Esta herramienta utiliza encriptación <strong>RSA-OAEP (SHA-256)</strong> con claves de 2048 bits.</p>
             </div>
         </div>
     </div>
 
-    <script>
-        // Elementos del DOM
-        const loginSection = document.getElementById('loginSection');
-        const registerSection = document.getElementById('registerSection');
-        const appSection = document.getElementById('appSection');
-        
-        const loginForm = document.getElementById('loginForm');
-        const usernameInput = document.getElementById('username');
-        const passwordInput = document.getElementById('password');
-        const loginMessage = document.getElementById('loginMessage');
-        const showRegisterLink = document.getElementById('showRegister');
-
-        const registerForm = document.getElementById('registerForm');
-        const newUsernameInput = document.getElementById('newUsername');
-        const newPasswordInput = document.getElementById('newPassword');
-        const confirmPasswordInput = document.getElementById('confirmPassword');
-        const registerMessage = document.getElementById('registerMessage');
-        const showLoginLink = document.getElementById('showLogin');
-        
-        const logoutButton = document.getElementById('logoutButton');
-        const messageInput = document.getElementById('message');
-        const encryptButton = document.getElementById('encryptButton');
-        const decryptButton = document.getElementById('decryptButton');
-        const appMessage = document.getElementById('appMessage');
-        const resultTextarea = document.getElementById('result');
-
-        const OPERATION_TIMEOUT = 30000; // 30 segundos de tiempo de espera para operaciones
-        const USERS_STORAGE_KEY = 'app_users'; // Clave para localStorage
-
-        // --- Lógica de Mensajes ---
-        function showMessage(element, text, type = 'info') { // types: info, error, success
-            element.textContent = text;
-            element.classList.remove('hidden', 'message-box-info', 'message-box-error', 'message-box-success');
-            if (type === 'error') {
-                element.classList.add('message-box-error');
-            } else if (type === 'success') {
-                element.classList.add('message-box-success');
-            }
-            else {
-                element.classList.add('message-box-info');
-            }
-        }
-
-        function hideMessage(element) {
-            element.classList.add('hidden');
-            element.textContent = '';
-        }
-        
-        function toggleButtonLoading(button, isLoading) {
-            const loader = button.querySelector('.loader');
-            if (isLoading) {
-                button.disabled = true;
-                if(loader) loader.classList.remove('hidden');
-            } else {
-                button.disabled = false;
-                if(loader) loader.classList.add('hidden');
-            }
-        }
-
-        // --- Lógica de Almacenamiento de Usuarios (localStorage - INSEGURO PARA PRODUCCIÓN) ---
-        function getUsers() {
-            const users = localStorage.getItem(USERS_STORAGE_KEY);
-            return users ? JSON.parse(users) : {};
-        }
-
-        function saveUser(username, password) {
-            // ADVERTENCIA: Guardar contraseñas en texto plano es extremadamente inseguro.
-            // Esto es solo para demostración en un entorno sin backend.
-            // En una aplicación real, las contraseñas NUNCA deben guardarse así.
-            // Se deben usar hashes seguros (ej. Argon2, bcrypt) manejados en un servidor.
-            const users = getUsers();
-            if (users[username]) {
-                return false; // El usuario ya existe
-            }
-            users[username] = password; // Guardar contraseña (inseguro)
-            localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-            return true; // Usuario guardado exitosamente
-        }
-
-        function verifyUser(username, password) {
-            const users = getUsers();
-            // La comparación de contraseñas aquí es directa, lo cual es inseguro.
-            return users[username] === password;
-        }
-
-        // --- Lógica de Autenticación y Vistas ---
-        function showLoginView() {
-            loginSection.classList.remove('hidden');
-            registerSection.classList.add('hidden');
-            appSection.classList.add('hidden');
-            hideMessage(loginMessage);
-            hideMessage(registerMessage);
-        }
-
-        function showRegisterView() {
-            loginSection.classList.add('hidden');
-            registerSection.classList.remove('hidden');
-            appSection.classList.add('hidden');
-            hideMessage(loginMessage);
-            hideMessage(registerMessage);
-        }
-
-        function showAppView() {
-            loginSection.classList.add('hidden');
-            registerSection.classList.add('hidden');
-            appSection.classList.remove('hidden');
-        }
-
-        function handleRegister(event) {
-            event.preventDefault();
-            hideMessage(registerMessage);
-            const username = newUsernameInput.value.trim();
-            const password = newPasswordInput.value;
-            const confirmPassword = confirmPasswordInput.value;
-
-            if (!username || !password || !confirmPassword) {
-                showMessage(registerMessage, 'Todos los campos son obligatorios.', 'error');
-                return;
-            }
-            if (password !== confirmPassword) {
-                showMessage(registerMessage, 'Las contraseñas no coinciden.', 'error');
-                return;
-            }
-            if (password.length < 6) { // Ejemplo de validación simple de contraseña
-                showMessage(registerMessage, 'La contraseña debe tener al menos 6 caracteres.', 'error');
-                return;
-            }
-
-            const success = saveUser(username, password);
-            if (success) {
-                showMessage(registerMessage, '¡Usuario registrado exitosamente! Ahora puedes iniciar sesión.', 'success');
-                registerForm.reset();
-                // Opcional: redirigir a login después de un breve momento
-                setTimeout(showLoginView, 2000); 
-            } else {
-                showMessage(registerMessage, 'Este nombre de usuario ya existe. Intenta con otro.', 'error');
-            }
-        }
-        
-        function handleLogin(event) {
-            event.preventDefault();
-            hideMessage(loginMessage);
-            const username = usernameInput.value.trim();
-            const password = passwordInput.value;
-
-            if (!username || !password) {
-                showMessage(loginMessage, 'Ingresa usuario y contraseña.', 'error');
-                return;
-            }
-
-            if (verifyUser(username, password)) {
-                sessionStorage.setItem('isLoggedIn', 'true'); // Usar sessionStorage para el estado de login actual
-                sessionStorage.setItem('loggedInUser', username); // Guardar el usuario logueado
-                showAppView();
-                loginForm.reset();
-            } else {
-                showMessage(loginMessage, 'Usuario o contraseña incorrectos.', 'error');
-            }
-        }
-
-        function handleLogout(timedOut = false) {
-            sessionStorage.removeItem('isLoggedIn');
-            sessionStorage.removeItem('loggedInUser');
-            showLoginView();
-            messageInput.value = '';
-            resultTextarea.value = '';
-            hideMessage(appMessage);
-            if (timedOut) {
-                showMessage(loginMessage, 'La sesión ha finalizado debido a inactividad o tiempo de espera excedido.', 'error');
-            }
-        }
-
-        function checkSession() {
-            if (sessionStorage.getItem('isLoggedIn') === 'true') {
-                showAppView();
-            } else {
-                showLoginView(); // Por defecto, mostrar login si no hay sesión activa
-            }
-        }
-
-        window.addEventListener('beforeunload', () => {
-            // sessionStorage se borra automáticamente al cerrar la pestaña/navegador.
-        });
-
-        // --- Lógica de Encriptación/Desencriptación con Timeout ---
-        function createTimeoutPromise(timeoutMs) {
-            return new Promise((_, reject) => {
-                setTimeout(() => {
-                    reject(new Error('Tiempo de espera de la operación excedido.'));
-                }, timeoutMs);
-            });
-        }
-
-        async function performOperationWithTimeout(operationFn, operationName) {
-            hideMessage(appMessage);
-            resultTextarea.value = '';
-            toggleButtonLoading(encryptButton, true);
-            toggleButtonLoading(decryptButton, true);
-            showMessage(appMessage, `Procesando ${operationName}...`);
-
-            try {
-                const operationPromise = new Promise((resolve, reject) => {
-                    try {
-                        const result = operationFn();
-                        resolve(result);
-                    } catch (error) {
-                        reject(error);
-                    }
-                });
-
-                const result = await Promise.race([
-                    operationPromise,
-                    createTimeoutPromise(OPERATION_TIMEOUT)
-                ]);
-                
-                resultTextarea.value = result;
-                showMessage(appMessage, `Mensaje ${operationName} exitosamente.`, 'info');
-
-            } catch (error) {
-                console.error(`Error en ${operationName}:`, error);
-                if (error.message.includes('Tiempo de espera')) {
-                    showMessage(appMessage, `Error: La operación de ${operationName} tardó demasiado y fue cancelada.`, 'error');
-                } else if (operationName === 'desencriptación' && (error.name === 'InvalidCharacterError' || error.message.toLowerCase().includes('base64'))) {
-                     showMessage(appMessage, 'Error: El mensaje no es válido para desencriptar (formato incorrecto).', 'error');
-                }
-                else {
-                    showMessage(appMessage, `Error al ${operationName.slice(0,-5)} el mensaje.`, 'error');
-                }
-            } finally {
-                toggleButtonLoading(encryptButton, false);
-                toggleButtonLoading(decryptButton, false);
-            }
-        }
-        
-        async function encryptMessage() {
-            const message = messageInput.value;
-            if (!message.trim()) {
-                showMessage(appMessage, 'Por favor, ingresa un mensaje para encriptar.', 'error');
-                return;
-            }
-            await performOperationWithTimeout(() => {
-                return btoa(unescape(encodeURIComponent(message)));
-            }, 'encriptación');
-        }
-
-        async function decryptMessage() {
-            const message = messageInput.value;
-             if (!message.trim()) {
-                showMessage(appMessage, 'Por favor, ingresa un mensaje para desencriptar.', 'error');
-                return;
-            }
-            await performOperationWithTimeout(() => {
-                return decodeURIComponent(escape(atob(message)));
-            }, 'desencriptación');
-        }
-
-        // --- Inicialización y Event Listeners ---
-        loginForm.addEventListener('submit', handleLogin);
-        registerForm.addEventListener('submit', handleRegister);
-        
-        showRegisterLink.addEventListener('click', showRegisterView);
-        showLoginLink.addEventListener('click', showLoginView);
-
-        logoutButton.addEventListener('click', () => handleLogout(false));
-        encryptButton.addEventListener('click', encryptMessage);
-        decryptButton.addEventListener('click', decryptMessage);
-
-        window.addEventListener('load', checkSession);
-
-    </script>
+    <script src="script.js"></script>
 </body>
 </html>
